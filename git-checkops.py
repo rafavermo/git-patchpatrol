@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 
-import sys
-
 class FailBuffer(object):
     def __init__(self):
         self.prebuf = ''
@@ -79,6 +77,8 @@ class CheckopsParser(object):
 
 if __name__ == "__main__":
     import fileinput
+    import sys
+
     failbuffer = FailBuffer()
     parser = CheckopsParser(failbuffer)
 
