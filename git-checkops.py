@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 
 class FailBuffer(object):
+    """
+    Accumulate lines which
+    """
     def __init__(self):
         self.prebuf = ''
         self.failbuf = ''
@@ -15,7 +18,7 @@ class FailBuffer(object):
     def flush(self):
         if len(self.failbuf) > 0:
             if not self.first:
-                print "--"
+                print
 
             print self.prebuf.rstrip()
             print self.failbuf.rstrip()
@@ -28,11 +31,16 @@ class FailBuffer(object):
         self.prebuf = ''
 
 class CheckopsParser(object):
+    """
+    Checks the output produced by PatchopParser for overlapping hunks. Whenever
+    overlapping hunks are encountered, they are printed to stdout. Multiple
+    occurences are sepparated by an empty line.
+    """
+
     def __init__(self, failbuffer):
         self.failbuffer = failbuffer
-        self.check = self.checkbegin
         self.status = 0
-        self.prev = None
+        self.expect = []
 
     def process(self, line, filename):
         fields = line.split(" ", 5)
@@ -41,39 +49,39 @@ class CheckopsParser(object):
         fields[1] = int(fields[1], 16)
         fields[3] = int(fields[3], 16)
 
-        self.check(fields, line, filename)
-        self.prev = fields
-
-    def checkbegin(self, fields, line, filename):
-        # (blob, offset, mark, length, path) = fields
         mark = fields[2]
 
         if mark == 'b':
-            self.failbuffer.flush()
-            self.failbuffer.suspect(line)
-            self.check = self.checkend
-        else:
-            self.failbuffer.fail(line)
-            self.status = 1
-            self.check = self.checkbegin
+            end = [
+                fields[0],
+                fields[1] + fields[3],
+                'e',
+                fields[3],
+                fields[4]
+            ]
+            self.expect.append(end)
 
-    def checkend(self, fields, line, filename):
-        # (blob, offset, mark, length, path) = fields
-        expect = [
-            self.prev[0],
-            self.prev[1] + self.prev[3],
-            'e',
-            self.prev[3],
-            self.prev[4]
-        ]
+            if len(self.expect) == 1:
+                self.failbuffer.suspect(line)
+            else:
+                self.status = 1
+                self.failbuffer.fail(line)
 
-        if fields == expect:
+        elif mark == 'e':
+            try:
+                index = self.expect.index(fields)
+                self.expect.pop(index)
+            except ValueError as e:
+                raise Error("List of operations is inconsistent. Encountered an hunk-end without having seen a matching hunk-begin.")
+
+            if len(self.expect) == 0:
+                self.failbuffer.suspect(line)
+            else:
+                self.status = 1
+                self.failbuffer.fail(line)
+
+        if len(self.expect) == 0:
             self.failbuffer.flush()
-            self.check = self.checkbegin
-        else:
-            self.failbuffer.fail(line)
-            self.status = 1
-            self.check = self.checkbegin
 
 if __name__ == "__main__":
     import fileinput
