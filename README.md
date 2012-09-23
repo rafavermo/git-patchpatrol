@@ -13,6 +13,17 @@ overlapping patches is generated.
 
 Git patchpatrol is like running git-blame on the future.
 
+When deploying patchpatrol for your git repository, it will answer the
+following questions:
+
+A:  Givan a repo, a set of patches and a single commit:
+    1.  For all patches which apply properly the object-ids and line numbers
+        where they apply in the specified commit.
+    2.  List of patches which do not apply.
+
+B:  Given a repo, a single patch and a range of commits:
+    1.  Subranges of commits where the patch applies successfully / fails.
+
 
 Usage:
 ------
@@ -54,6 +65,48 @@ blobs/
         patch-sha1-2.hunks
     <xz>/<sha1-blob-3>/
 
+Filesystem-Structure (detached head):
+-------------------------------------
+
+changesets.txt          // <- Index of tested changesets
+patches.txt             // <- Index of tested patches
+rules.txt               // <- Testing rules (restrict patch to branch commit..range)
+
+patches/
+    some/scheme/patch.diff
+    other/patch-2.diff
+
+
+Schedule:
+
+Determine which changesets must be tested for which patches
+for each patch do:
+    1. Extract paths of affected files
+    2. Determine changesets for affected files using git rev-list
+    3. Update map: changeset -> [patches]
+
+Schedule Filter:
+* FILTER (patch)
+  -> Not before date|commit
+    -> Could be populated automatically by patch file ctime 
+  -> Not after date|commit
+    -> Could be populated automatically when patch was commited
+
+Result cache:
+-------------
+* EXISTS? (patch, blob)
+  -> yes/no
+* GET (patch, blob)
+  -> hunk-events|empty list
+* PUT (patch, blob, hunk-events)
+
+blob resolver:
+* Given a patch and a changeset/list of changesets/range, return the commits,
+  affecting one or more files mentioned in the patch.
+  -> git rev-list <commit> -- <paths>
+
+* RESOLVE (changeset, patch)
+  -> map(pathname -> {changeset => blob, ...})
 
 Queries:
 * SHOULD TEST? (changeset, patch)
