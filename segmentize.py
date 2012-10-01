@@ -87,12 +87,10 @@ if __name__ == '__main__':
         tail = segment[-1]
         print("checking %s..%s" % (tail, tip))
         commits = r.git.rev_list("%s..%s" % (tail, tip)).splitlines()
-        if (commits != segment[0:-1]):
-            print('tip/tail: %s %s' % (tip, tail))
+        commits.append(tail)
+        if (commits != segment):
             print('commits')
             pprint.pprint(commits)
             print('segment')
             pprint.pprint(segment)
-            print('segment[0:-1]')
-            pprint.pprint(segment[0:-1])
             raise Exception('fail')
