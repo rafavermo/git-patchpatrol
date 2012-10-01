@@ -92,6 +92,11 @@ Schedule Filter:
   -> Not after date|commit
     -> Could be populated automatically when patch was commited
 
+
+* Starthint: commit-id -- default: mtime
+* -> Last sucessfull application
+* -> First failing application
+
 Result cache:
 -------------
 * EXISTS? (patch, blob)

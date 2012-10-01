@@ -1,134 +1,121 @@
+# Tree segmentation and -walking algorithm.
+#
+# Segmentation: Split up a git history into sequences of commits where every
+# commit has exactly one parent. The first commit in a segment therefore either
+# has 0 or >1 parent.
+
 import shlex
 import pprint
 from collections import namedtuple
 
 Treenode = namedtuple('Treenode', 'mode type sha path')
 
-def segmentize(repo, include = None, exclude = None):
-    if include == None:
+def segmentize(repo, heads = None, exclude = None, before = None, after = None):
+    if heads == None:
         heads = repo.git.for_each_ref("refs/heads", format="%(refname)").splitlines()
-    else:
-        heads = include[:]
 
     if exclude == None:
         exclude = []
-    else:
-        exclude = exclude[:]
 
-    result = []
-    while len(heads) > 0:
-        head = heads.pop(0)
+    mergeheads = [heads]
+    exargs = map(lambda a: "^%s" % a, exclude)
+    args = heads + exargs + ['--']
 
-        exargs = map(lambda a: "^%s" % a, exclude + heads)
-        args = [head] + exargs + ['--']
-        flags = {
-            'format': 'format:%P',
-            'merges': True,
-            'no_abbrev': True
-        }
-    
-        out = repo.git.log(*args, **flags).strip()
-    
-        parents = out.split()
-    
-        result.append((head, exclude + heads + parents))
-    
-        while len(parents) > 0:
-            parent = parents.pop(0)
-            result.append((parent, exclude + heads + parents))
+    out = repo.git.log(*args, format='format:%P', all=True, merges=True, no_abbrev=True)
+    for line in out.splitlines():
+        mergeheads.append(line.strip().split())
 
-    return result
+    # Flatten mergeheads into points of interest
+    poi = set([item for sublist in mergeheads for item in sublist])
+
+    # Walk through heads and determine merge-bases
+    for heads in mergeheads:
+        for pair in zip(heads[:-1], heads[1:]):
+
+            base = repo.git.merge_base(*(list(pair) + exargs + ['--'])).strip()
+            if base != '':
+                poi.add(base)
+
+    # Order points of interests by date
+    return repo.git.rev_list(*(heads + list(poi)), no_walk=True).split()
 
 
-class Treewalk(object):
-    def __init__(self, repo, head = 'HEAD', exclude = None):
-        self.repo = repo
-        self.head = head
+def walk(repo, head = None, exclude = None):
+    pathmap = {}
+    prevcommit = None
 
-        if exclude:
-            self.exclude = exclude
-        else:
-            self.exclude = []
+    # Build up pathmap
+    out = repo.git.ls_tree(head, no_abbrev=True, r=True)
+    for line in out.splitlines():
+        node = Treenode(*shlex.split(line))
+        pathmap[node.path] = node
 
-        self.pathmap = None
-        self.prevpathmap = None
-        self.prevcommit = None
+    args = [head] + map(lambda a: "^%s" % a, exclude) + ['--']
+    out = repo.git.log(*args, no_abbrev=True, raw=True, format="format:%H %ct")
 
-        self.listeners = {}
+    for message in out.split("\n\n"):
+        if (message.strip() == ''):
+            continue
 
-    def walk(self, build_content=True, indent=''):
-        if build_content:
-            self._build_content()
+        lines = message.splitlines()
+        (commit, timestamp) = lines.pop(0).split()
 
-        args = [self.head]
-        args.extend(self.exclude)
+        print commit
 
-        out = self.repo.git.log(*args, no_abbrev=True, raw=True, format="format:%H %ct")
-        for message in out.split("\n\n"):
-            lines = message.splitlines()
+        # Workaround: Merge-only commits (not affecting any files) sometimes
+        # are separated to following commits only with one newline, instead of
+        # two. In this case we just stick with the following commit id.
+        while(len(lines) > 0 and lines[0][0] != ':'):
             (commit, timestamp) = lines.pop(0).split()
 
-            # Workaround: Merge-only commits sometimes are separated to
-            # following commits only with one newline, instead of two. In this
-            # case we just stick with the following commit id.
-            while(len(lines) > 0 and lines[0][0] != ':'):
-                (commit, timestamp) = lines.pop(0).split()
+        # Parse lines and fire alteration events
+        prevpathmap = pathmap.copy()
 
-            self.handlecommit(prevcommit, commit, prevpathmap, pathmap)
+        for line in lines:
+            if (line[0] != ':'):
+                continue
 
-            # Parse lines and fire alteration events
-            self.prevpathmap = self.pathmap.copy()
+            (oldmode, newmode, oldsha, newsha, op, path) = shlex.split(line[1:])
+            oldnode = Treenode(oldmode, 'blob', oldsha, path)
+            newnode = Treenode(newmode, 'blob', newsha, path)
 
-            for line in lines:
-                if (line[0] != ':'):
-                    continue
+            if (op == 'M'):
+                assert(pathmap[path] == newnode)
+                prevpathmap[path] = oldnode
 
-                (oldmode, newmode, oldsha, newsha, op, path) = shlex.split(line[1:])
-                oldnode = Treenode(oldmode, 'blob', oldsha, path)
-                newnode = Treenode(newmode, 'blob', newsha, path)
+            elif (op == 'A'):
+                assert(pathmap[path] == newnode)
+                prevpathmap.pop(path)
 
-                if (op == 'M'):
-                    assert(self.pathmap[path] == newnode)
-                    self.prevpathmap[path] = oldnode
+            elif (op == 'D'):
+                prevpathmap[path] = oldnode
 
-                elif (op == 'A'):
-                    assert(self.pathmap[path] == newnode)
-                    self.prevpathmap.pop(path)
-
-                elif (op == 'D'):
-                    self.prevpathmap[path] = oldnode
-
-            self.pathmap = self.prevpathmap
-
-    def _build_content(self):
-        self.pathmap = {}
-
-        out = self.repo.git.ls_tree(self.head, no_abbrev=True, r=True)
-
-        for line in out.splitlines():
-            node = Treenode(*shlex.split(line))
-            self.pathmap[node.path] = node
+        pathmap = prevpathmap
 
 if __name__ == '__main__':
     from git import Repo
     
     r = Repo('.')
-    segments = segmentize(r)
+    pois = segmentize(r)
+    for poi in pois:
+        print poi 
+#    print segments
 
-#    walker = Treewalk(r)
-#    walker.walk()
-    
-#    pprint.pprint(segments)
-
-    print "Need to examine %d segments" % len(segments)
-    empty = 0
-    for segment in segments:
-        (include, exclude) = segment
-        exargs = map(lambda a: "^%s" % a, exclude)
-#        repo.git.log
-#        print self.repo.git.log(*args, no_abbrev=True, raw=True, format="format:%H %ct")
-        out = r.git.log(*([include] + exargs), no_abbrev=True, format="format:%H")
-        if out.strip() == '':
-            empty += 1
-
-    print "Empty segments: %d" % empty
+##    walker = Treewalk(r)
+##    walker.walk()
+#    
+##    pprint.pprint(segments)
+#
+#    print "Need to examine %d segments" % len(segments)
+#    empty = 0
+#    for segment in segments:
+#        (head, exclude) = segment
+#        walk(r, head, exclude)
+##        exargs = map(lambda a: "^%s" % a, exclude)
+###        repo.git.log
+###        print self.repo.git.log(*args, no_abbrev=True, raw=True, format="format:%H %ct")
+##        out = r.git.log(*([include] + exargs), no_abbrev=True, format="format:%H")
+##        if out.strip() == '':
+##            empty += 1
+#
+##    print "Empty segments: %d" % empty

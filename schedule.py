@@ -42,10 +42,10 @@ class PatchParser(object):
                     self.spool = self.spool - 1
 
             elif line.startswith('--- '):
-                self.handlers['old_file'](line)
+                self.handlers['old_file'](line.split("\t")[0])
 
             elif line.startswith('+++ '):
-                self.handlers['new_file'](line)
+                self.handlers['new_file'](line.split("\t")[0])
 
             else:
                 result = self.phunk.match(line)
@@ -87,7 +87,10 @@ class Patch(object):
             self._new_paths = set()
 
             def add_old_path(line):
-                path = line[3:]
+                path = line[4:]
+
+                if (path.strip() == '/dev/null'):
+                    return
 
                 # Strip prefix (-p parameter)
                 if (self.pfxlen > 0):
@@ -96,7 +99,10 @@ class Patch(object):
                 self._old_paths.add(path.rstrip())
 
             def add_new_path(line):
-                path = line[3:]
+                path = line[4:]
+
+                if (path.strip() == '/dev/null'):
+                    return
 
                 # Strip prefix (-p parameter)
                 if (self.pfxlen > 0):
@@ -148,101 +154,111 @@ class PatchFactory(object):
         patch.pfxlen = pfxlen
         return patch
 
-class RevListArgsFactory(object):
-    def __init__(self, *args, **kwargs):
-        self.args = list(args)
-        self.kwargs = kwargs
-
-    def constructArgsForPatch(self, patch):
-        paths = list(patch.paths)
-        if len(paths) == 0:
-            raise Exception('No paths in patch')
-
-        args = self.args + ['--'] + paths
-        kwargs = self.kwargs.copy()
-        kwargs.setdefault('after', patch.mtime)
-
-        return (args, kwargs)
-
-class HistoryWindow(object):
-    def __init__(self):
-        self.top = None
-        self.bottom = None
-        self.mindate = None
-        self.maxdate = None
-
 if __name__ == '__main__':
-    import sys, pprint
+    import sys, shutil, pprint
     from git import Repo
+    from git.errors import GitCommandError
 
     repo = Repo('.')
 
-    if repo.git.status(porcelain=True) != '':
-        print "Your git repository contains modified or untracked files. Cannot continue."
-        sys.exit(1)
-
     pf = PatchFactory(repo.git)
-    af = RevListArgsFactory('8.x', '^7.x')
 
     patches = []
     for patchpath in sys.argv[1:]:
-        for pfxlen in (1, 0):
-            try:
-                patch = pf.constructPatch(patchpath, pfxlen)
-                (args, kwargs) = af.constructArgsForPatch(patch)
-                print "Adding patch %s with pfxlen %d" % (patchpath, pfxlen)
-                patches.append((patch, args, kwargs))
-                break
-            except:
-                pass
-
-    plan = {}
-    for (patchobj, args, kwargs) in patches:
-        print "Examining patch %s" % (patchobj.path)
-        out = repo.git.rev_list(*args, **kwargs)
-
-        for commit in out.splitlines():
-            patches = plan.setdefault(commit, list())
-            patches.append(patchobj)
-
-    for (commit, patches) in plan.iteritems():
-        paths = set()
-
-        for patch in patches:
-            paths.update(patch.old_paths)
-
         try:
-            paths.remove('/dev/null')
-        except KeyError:
-            pass
-
-        args = [commit, '--']
-        args.extend(paths)
-
-        out = repo.git.ls_tree(*args, r=True)
-        pathmap = dict()
-        for line in out.splitlines():
-            (m, t, oid, path) = line.split(None, 4)
-            pathmap[path] = oid
-
-        for patch in patches:
-            if len(patch.old_paths.difference(pathmap.keys())) > 0:
-                # No point on trying to apply this patch. Some paths are
-                # missing.
+            patch = pf.constructPatch(patchpath)
+            if len(patch.old_paths) == 0:
                 continue
+        except:
+            continue
 
-            # FIXME: Check cache
+#       print "Adding patch %s with pfxlen %d" % (patchpath, pfxlen)
+        patches.append(patch)
 
-            # Checkout commit
-            repo.git.checkout(commit)
-            repo.git.apply(patch.path)
-            newpatch = repo.git.diff()
+    out = repo.git.show_ref(heads=True, no_abbrev=True)
 
-            # FIXME: Parse cache and record lines
+    # FIXME: Setup alternative index and point GIT_INDEX_FILE to it
+    headref = os.path.join(repo.path, 'HEAD')
+    origref = os.path.join(repo.path, 'ORIG_HEAD')
 
-            # FIXME: Update cache
-            repo.git.clean(f=True, x=True, d=True, q=True)
+    if os.path.exists(origref):
+        print "ORIG_HEAD exists. Please cleanup your repository and try again"
+        sys.exit(1)
 
-        pprint.pprint(pathmap)
+    shutil.copy(headref, origref)
+
+    for patch in patches:
+        print "Examining patch %s" % (patch.path)
+        heads_exclude = []
+
+        for line in out.splitlines():
+            (branchid, branchref) = line.split(None, 1)
+            args = [branchid]
+            args.extend(heads_exclude)
+            args.append('--')
+            args.extend(patch.old_paths)
+
+            history = repo.git.log(*args, format="format:%H %T %ct", after=patch.mtime, reverse=True).splitlines()
+            heads_exclude.append('^%s' % branchid)
+
+            print "  Testing commits on %s" % branchref
+            for line in history:
+                (commit, tree, timestamp) = line.split(' ', 2)
+
+                repo.git.read_tree(tree)
+                try:
+                    repo.git.apply(patch.path, cached=True)
+                    print "  Patch applied on %s" % commit
+                except GitCommandError:
+                    print "  Patch failed for %s" % commit
+                    break
+
+                # Point HEAD to commit
+                f = open(headref, 'w')
+                f.write("%s\n" % commit)
+                f.close()
+
+                repo.git.diff(cached=True)
+
+#    for (commit, patches) in plan.iteritems():
+#        paths = set()
+#
+#        for patch in patches:
+#            paths.update(patch.old_paths)
+#
+#        try:
+#            paths.remove('dev/null')
+#        except KeyError:
+#            pass
+#
+#        args = [commit, '--']
+#        args.extend(paths)
+#
+#        out = repo.git.ls_tree(*args, r=True)
+#        pathmap = dict()
+#        for line in out.splitlines():
+#            (m, t, oid, path) = line.split(None, 4)
+#            pathmap[path] = oid
+#
+#        for patch in patches:
+#            if len(patch.old_paths.difference(pathmap.keys())) > 0:
+#                # No point on trying to apply this patch. Some paths are
+#                # missing.
+#                print "Ignoring patch %s on commit %s" % (patch.path, commit)
+#                continue
+#
+#            # FIXME: Check cache
+#
+#            # Checkout commit
+#            repo.git.checkout(commit)
+#            repo.git.apply(patch.path)
+#            newpatch = repo.git.diff()
+#
+#            # FIXME: Parse cache and record lines
+#
+#            # FIXME: Update cache
+#            repo.git.clean(f=True, x=True, d=True, q=True)
+
+        #pprint.pprint(pathmap)
 
 #    pprint.pprint(plan)
