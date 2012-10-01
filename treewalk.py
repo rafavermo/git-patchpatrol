@@ -7,50 +7,21 @@
 import shlex
 import pprint
 from collections import namedtuple
+from segmentize import segmentize
 
 Treenode = namedtuple('Treenode', 'mode type sha path')
 
-def segmentize(repo, heads = None, exclude = None, before = None, after = None):
-    if heads == None:
-        heads = repo.git.for_each_ref("refs/heads", format="%(refname)").splitlines()
-
-    if exclude == None:
-        exclude = []
-
-    mergeheads = [heads]
-    exargs = map(lambda a: "^%s" % a, exclude)
-    args = heads + exargs + ['--']
-
-    out = repo.git.log(*args, format='format:%P', all=True, merges=True, no_abbrev=True)
-    for line in out.splitlines():
-        mergeheads.append(line.strip().split())
-
-    # Flatten mergeheads into points of interest
-    poi = set([item for sublist in mergeheads for item in sublist])
-
-    # Walk through heads and determine merge-bases
-    for heads in mergeheads:
-        for pair in zip(heads[:-1], heads[1:]):
-
-            base = repo.git.merge_base(*(list(pair) + exargs + ['--'])).strip()
-            if base != '':
-                poi.add(base)
-
-    # Order points of interests by date
-    return repo.git.rev_list(*(heads + list(poi)), no_walk=True).split()
-
-
-def walk(repo, head = None, exclude = None):
+def walk(repo, segment):
     pathmap = {}
     prevcommit = None
 
     # Build up pathmap
-    out = repo.git.ls_tree(head, no_abbrev=True, r=True)
+    out = repo.git.ls_tree(segment[0], no_abbrev=True, r=True)
     for line in out.splitlines():
         node = Treenode(*shlex.split(line))
         pathmap[node.path] = node
 
-    args = [head] + map(lambda a: "^%s" % a, exclude) + ['--']
+    args = [segment[0], "^%s" % segment[-1], '--']
     out = repo.git.log(*args, no_abbrev=True, raw=True, format="format:%H %ct")
 
     for message in out.split("\n\n"):
@@ -94,28 +65,10 @@ def walk(repo, head = None, exclude = None):
 
 if __name__ == '__main__':
     from git import Repo
-    
-    r = Repo('.')
-    pois = segmentize(r)
-    for poi in pois:
-        print poi 
-#    print segments
 
-##    walker = Treewalk(r)
-##    walker.walk()
-#    
-##    pprint.pprint(segments)
-#
-#    print "Need to examine %d segments" % len(segments)
-#    empty = 0
-#    for segment in segments:
-#        (head, exclude) = segment
-#        walk(r, head, exclude)
-##        exargs = map(lambda a: "^%s" % a, exclude)
-###        repo.git.log
-###        print self.repo.git.log(*args, no_abbrev=True, raw=True, format="format:%H %ct")
-##        out = r.git.log(*([include] + exargs), no_abbrev=True, format="format:%H")
-##        if out.strip() == '':
-##            empty += 1
-#
-##    print "Empty segments: %d" % empty
+    r = Repo('.')
+    segments = segmentize(r)
+
+    print "Need to examine %d segments" % len(segments)
+    for segment in segments:
+        walk(r, segment)
