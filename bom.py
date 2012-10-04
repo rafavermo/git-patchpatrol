@@ -3,33 +3,39 @@ import shlex
 
 class BOM(object):
     def __init__(self):
-        self._current = {}
-        self._commits = []
+        self._current_blobs = {}
+        self._paths = {}
 
     def startCommit(self):
-        self._current = {}
-        self._current['blobs'] = {}
+        self._current_blobs = {}
 
     def addBlob(self, path, blobid):
         pathid = hashlib.sha1(path).hexdigest()
-        self._current['blobs'][pathid] = blobid
+        self._current_blobs[pathid] = blobid
 
     def endCommit(self, sha):
-        if len(self._current['blobs']) < 1:
+        if len(self._current_blobs) < 1:
             return
 
-        self._current['commit'] = sha
-        self._commits.append(self._current)
+        for (pathid, blobid) in self._current_blobs.iteritems():
+            blobs = self._paths.setdefault(pathid, {})
+            blobs[sha] = blobid
+
+    def getBlobs(self, path):
+        """
+        Return a dictionary of commit -> blob mappings for the given path.
+        """
+        pathid = hashlib.sha1(path).hexdigest()
+        return self._paths[pathid]
 
     def __str__(self):
         lines = []
-        for commit in self._commits:
-            lines.append('commit %s' % commit['commit'])
-            for (pathid, blobid) in commit['blobs'].iteritems():
-                lines.append("%s %s" % (blobid, pathid))
+        for (pathid, blobs) in self._paths.iteritems():
+            lines.append('path %s' % pathid)
+            for (commit, blobid) in blobs.iteritems():
+                lines.append("%s %s" % (blobid, commit))
 
         return "\n".join(lines)
-
 
 def bomFromSegment(repo, segment):
     """
