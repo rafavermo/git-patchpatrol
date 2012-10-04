@@ -91,13 +91,14 @@ def bomFromSegment(repo, segment):
 if __name__ == '__main__':
     from segmentize import segmentize
     from git import Repo
-    import pickle
+    from cache import FilesystemResultCache
+
 
     r = Repo('.')
     segments = segmentize(r)
 
-    boms = []
+    cache = FilesystemResultCache()
+    cache.directory='/tmp/bom-cache'
     for segment in segments:
-        boms.append(bomFromSegment(r, segment))
-
-    pickle.dump(boms, open('/tmp/boms', 'w'))
+        bom = bomFromSegment(r, segment)
+        cache.put(segment[0], segment[-1], bom)
