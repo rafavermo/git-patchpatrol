@@ -1,6 +1,8 @@
 import hashlib
 import shlex
 
+_HASHREMOVE = "".zfill(40)
+
 class BOM(object):
     def __init__(self):
         self._current = {}
@@ -8,25 +10,33 @@ class BOM(object):
 
     def startCommit(self):
         self._current = {}
-        self._current['blobs'] = {}
+        self._current['change'] = {}
+        self._current['remove'] = []
 
-    def addBlob(self, path, blobid):
-        pathid = hashlib.sha1(path).hexdigest()
-        self._current['blobs'][pathid] = blobid
+    def changeBlob(self, pathid, blobid):
+        self._current['change'][pathid] = blobid
+
+    def removeBlob(self, pathid):
+        self._current['remove'].append(pathid)
 
     def endCommit(self, sha):
-        if len(self._current['blobs']) < 1:
+        if len(self._current['change']) < 1:
             return
 
         self._current['commit'] = sha
         self._commits.append(self._current)
 
+    def commits(self):
+        return self._commits
+
     def __str__(self):
         lines = []
         for commit in self._commits:
             lines.append('commit %s' % commit['commit'])
-            for (pathid, blobid) in commit['blobs'].iteritems():
-                lines.append("%s %s" % (blobid, pathid))
+            for (pathid, blobid) in commit['change'].iteritems():
+                lines.append("+ %s %s" % (blobid, pathid))
+            for pathid in commit['remove']:
+                lines.append("- %s" % pathid)
 
         return "\n".join(lines)
 
@@ -44,7 +54,7 @@ def bomFromSegment(repo, segment):
     out = repo.git.ls_tree(segment[0], no_abbrev=True, r=True)
     for line in out.splitlines():
         (mode, t, sha, path) = shlex.split(line)
-        bom.addBlob(path, sha)
+        bom.changeBlob(path, sha)
 
     bom.endCommit(segment[0])
 
@@ -76,7 +86,10 @@ def bomFromSegment(repo, segment):
                 continue
 
             (prevmode, newmode, prevsha, newsha, op, path) = shlex.split(line[1:])
-            bom.addBlob(path, prevsha)
+            if prevsha == _HASHREMOVE:
+                bom.removeBlob(path)
+            else:
+                bom.changeBlob(path, prevsha)
 
     bom.endCommit(segment[-1])
 
@@ -95,4 +108,5 @@ if __name__ == '__main__':
     cache.directory='/tmp/bom-cache'
     for segment in segments:
         bom = bomFromSegment(r, segment)
+        print bom
         cache.put(segment[0], segment[-1], bom)
