@@ -9,7 +9,7 @@ def parse(source):
     Symbols is one of:
     'a':    Path for old file
     'b':    Path for new file
-    '@':    Start new hunk
+    '@':    Start new hunk (deletes, inserts)
     '+':    Insert line
     '-':    Remove line
     '=':    Context line
@@ -44,8 +44,6 @@ def parse(source):
         else:
             result = HUNK_PATTERN.match(line)
             if result:
-                yield ('@', line)
-
                 # Start spooling lines following the hunk header
                 if result.group(3) == None:
                     deletes = 1
@@ -55,6 +53,9 @@ def parse(source):
                     inserts = 1
                 else:
                     inserts = int(result.group(6))
+
+                data = (int(result.group(1)), deletes, int(result.group(4)), inserts)
+                yield ('@', data)
 
             else:
                 yield ('?', line)
@@ -72,4 +73,6 @@ def pathstrip(path, pfxlen=1):
 if __name__ == '__main__':
     source = open('test.patch', 'r')
     for (sym, line) in parse(source):
-        print "sym: %s, content: %s" % (sym, line.rstrip())
+        if hasattr(line, 'rstrip'):
+            line = line.rstrip()
+        print "sym: %s, content: %s" % (sym, line)
