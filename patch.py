@@ -59,10 +59,8 @@ def parse(source):
             else:
                 yield ('?', line)
 
-def pathstrip(line, pfxlen=1):
-    path = line[4:]
-
-    if (path.strip() == '/dev/null'):
+def pathstrip(path, pfxlen=1):
+    if (path == '/dev/null'):
         return None
 
     # Strip prefix (-p parameter)
