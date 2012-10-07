@@ -52,7 +52,7 @@ class BOMWalk(object):
 
             if len(ready) > 0:
                 for key in ready:
-                    paths = dict((path, commit['change'][path]) for path in self._paths_by_key[key])
+                    paths = dict((path, commit['change'][path]) for path in self._paths_by_key[key] if path in commit['change'])
                     yield (commit['commit'], key, paths)
 
     def _addpaths(self, paths):

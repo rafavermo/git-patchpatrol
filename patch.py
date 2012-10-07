@@ -7,6 +7,7 @@ def parse(source):
     """
     Parse patch file and yield one tuple (symbol, content) for each line.
     Symbols is one of:
+    'i':    Index line (old blobid, new blobid)
     'a':    Path for old file
     'b':    Path for new file
     '@':    Start new hunk (deletes, inserts)
@@ -41,7 +42,7 @@ def parse(source):
         elif line.startswith('+++ '):
             yield ('b', line.split("\t")[0][4:])
 
-        else:
+        elif line.startswith('@@ -'):
             result = HUNK_PATTERN.match(line)
             if result:
                 # Start spooling lines following the hunk header
@@ -56,9 +57,17 @@ def parse(source):
 
                 data = (int(result.group(1)), deletes, int(result.group(4)), inserts)
                 yield ('@', data)
-
             else:
+                # FIXME: throw exception: malformed hunk
                 yield ('?', line)
+
+        elif line.startswith('index '):
+            commits = line[6:].split()[0]
+            (old, new) = commits.split('..')
+            yield ('i', (old, new))
+
+        else:
+            yield ('?', line)
 
 def pathstrip(path, pfxlen=1):
     if (path == '/dev/null'):
@@ -68,7 +77,7 @@ def pathstrip(path, pfxlen=1):
     if (pfxlen > 0):
         (prefix, path) = path.split("/", pfxlen)
 
-    return path
+    return path.rstrip()
 
 if __name__ == '__main__':
     source = open('test.patch', 'r')
