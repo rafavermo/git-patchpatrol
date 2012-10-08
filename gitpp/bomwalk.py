@@ -21,6 +21,7 @@ class BOMWalk(object):
         # Paths, which may not go away without affecting the listed keys.
         self._paths_watched = {}
 
+
     def watch(self, key, paths):
         self._paths_missing_count[key] = 0
 
@@ -30,14 +31,13 @@ class BOMWalk(object):
             self._paths_missing_count[key] += 1
 
         self._paths_by_key[key] = paths
-    
+
+
     def walk(self):
         # Initial commit contains all files
-        commits = self._bom.commits()
-
-        for commit in commits:
-            self._removepaths(commit['remove'])
-            changed = commit['change'].keys()
+        for entry in self._bom:
+            self._removepaths(entry.remove)
+            changed = entry.change.keys()
             self._addpaths(changed)
 
             # Construct a set of keys which are ready.
@@ -50,10 +50,10 @@ class BOMWalk(object):
                     if self._paths_missing_count[key] == 0:
                         ready.add(key)
 
-            if len(ready) > 0:
-                for key in ready:
-                    paths = dict((path, commit['change'][path]) for path in self._paths_by_key[key] if path in commit['change'])
-                    yield (commit['commit'], key, paths)
+            for key in ready:
+                paths = dict((path, entry.change[path]) for path in self._paths_by_key[key] if path in entry.change)
+                yield (entry.id, key, paths)
+
 
     def _addpaths(self, paths):
         for path in paths:
@@ -69,6 +69,7 @@ class BOMWalk(object):
 
             self._paths_watched[path] = keys
 
+
     def _removepaths(self, paths):
         for path in paths:
             if path not in self._paths_watched:
@@ -79,6 +80,7 @@ class BOMWalk(object):
                 self._paths_missing_count[key] += 1
 
             self._paths_missing[path] = keys
+
 
 if __name__ == '__main__':
     import pprint
