@@ -8,11 +8,14 @@ from datetime import datetime
 from git import Repo
 from git.errors import GitCommandError
 
-import patch
-from bom import bomFromSegment
-from cache import FilesystemResultCache
-from segmentize import segmentize
-from walk import BOMWalk
+base = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), '..', '..'))
+sys.path.append(base)
+
+from gitpp import patch
+from gitpp.bomwalk import BOMWalk
+from gitpp.cache import FilesystemResultCache
+from gitpp.scm.git import bom_from_segment
+from gitpp.scm.git import segmentize
 
 
 def savehead(path):
@@ -80,7 +83,7 @@ def patchid(repo, path):
 
 if __name__ == '__main__':
 
-    logging.getLogger().setLevel(logging.DEBUG)
+    #logging.getLogger().setLevel(logging.DEBUG)
 
     bomcache = FilesystemResultCache()
     bomcache.directory = '/tmp/bomcache'
@@ -128,7 +131,7 @@ if __name__ == '__main__':
         if bomcache.exists(segment[0], segment[-1]):
             bom = bomcache.get(segment[0], segment[-1])
         else:
-            bom = bomFromSegment(repo, segment)
+            bom = bom_from_segment(repo, segment)
             bomcache.put(segment[0], segment[-1], bom)
 
         walk = BOMWalk(segment, bom)
