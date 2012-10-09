@@ -1,8 +1,7 @@
 import hashlib
 
 class BOMWalk(object):
-    def __init__(self, segment, bom):
-        self._segment = segment
+    def __init__(self, bom):
         self._bom = bom
 
         # Map: key => [list of paths]
@@ -104,7 +103,7 @@ if __name__ == '__main__':
         else:
             bom = bomFromSegment(r, segment)
 
-        walk = BOMWalk(segment, bom)
+        walk = BOMWalk(bom)
         walk.watch('cl', ['README.txt'])
         for (commit, key, paths) in walk.walk():
             if (key, tuple(paths.items())) in seen:

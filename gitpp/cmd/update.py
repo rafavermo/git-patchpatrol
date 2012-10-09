@@ -78,7 +78,7 @@ if __name__ == '__main__':
             bom = ctl.bom_from_segment(segment)
             bomcache.put(segment[0], segment[-1], bom)
 
-        walk = BOMWalk(segment, bom)
+        walk = BOMWalk(bom)
 
         for (pid, p) in patches.iteritems():
             blobs_by_patch[pid] = {}
