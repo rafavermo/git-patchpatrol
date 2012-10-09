@@ -3,7 +3,7 @@ import unittest
 from gitpp.bomwalk import BOMWalk
 from gitpp.bom import BOMEntry
 
-class TestSequenceFunctions(unittest.TestCase):
+class BOMWalkTest(unittest.TestCase):
 
     def setUp(self):
         bom = [
