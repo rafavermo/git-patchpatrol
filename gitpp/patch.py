@@ -3,6 +3,10 @@ import re
 # Regex for matching a hunk
 HUNK_PATTERN = re.compile(r'^@@ -(\d+)(,(\d+))? \+(\d+)(,(\d+)) @@?')
 
+def ParseError(Exception):
+    pass
+
+
 def parse(source):
     """
     Parse patch file and yield one tuple (symbol, content) for each line.
@@ -31,16 +35,19 @@ def parse(source):
                 inserts -= 1
                 yield ('+', line[1:])
 
-            else:
+            elif line.startswith(' '):
                 inserts -= 1
                 deletes -= 1
                 yield ('=', line[1:])
 
+            else:
+                raise ParseError('Malformed patch: Unprefixed line within hunk.')
+
         elif line.startswith('--- '):
-            yield ('a', line.split("\t")[0][4:])
+            yield ('a', line.split("\t")[0][4:].rstrip())
 
         elif line.startswith('+++ '):
-            yield ('b', line.split("\t")[0][4:])
+            yield ('b', line.split("\t")[0][4:].rstrip())
 
         elif line.startswith('@@ -'):
             result = HUNK_PATTERN.match(line)
@@ -69,19 +76,16 @@ def parse(source):
         else:
             yield ('?', line)
 
+    if deletes > 0 or inserts > 0:
+        raise ParseError('Malformed patche: Unexpected end of file')
+
+
 def pathstrip(path, pfxlen=1):
     if (path == '/dev/null'):
         return None
 
     # Strip prefix (-p parameter)
     if (pfxlen > 0):
-        (prefix, path) = path.split("/", pfxlen)
+        path = path.split("/", pfxlen)[-1]
 
-    return path.rstrip()
-
-if __name__ == '__main__':
-    source = open('test.patch', 'r')
-    for (sym, line) in parse(source):
-        if hasattr(line, 'rstrip'):
-            line = line.rstrip()
-        print "sym: %s, content: %s" % (sym, line)
+    return path
