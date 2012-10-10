@@ -1,0 +1,220 @@
+diff --git a/modules/locale/locale-rtl.css b/modules/locale/locale-rtl.css
+deleted file mode 100644
+index aaf1988..0000000
+--- a/modules/locale/locale-rtl.css
++++ /dev/null
+@@ -1,12 +0,0 @@
+-
+-#locale-translation-filter-form .form-item-language,
+-#locale-translation-filter-form .form-item-translation,
+-#locale-translation-filter-form .form-item-group {
+-  float: right;
+-  padding-left: .8em;
+-  padding-right: 0;
+-}
+-#locale-translation-filter-form .form-actions {
+-  float: right;
+-  padding: 3ex 1em 0 0;
+-}
+diff --git a/modules/locale/locale.css b/modules/locale/locale.css
+deleted file mode 100644
+index 38112b5..0000000
+--- a/modules/locale/locale.css
++++ /dev/null
+@@ -1,32 +0,0 @@
+-
+-.locale-untranslated {
+-  font-style: normal;
+-  text-decoration: line-through;
+-}
+-
+-#locale-translation-filter-form .form-item-language,
+-#locale-translation-filter-form .form-item-translation,
+-#locale-translation-filter-form .form-item-group {
+-  float: left; /* LTR */
+-  padding-right: .8em; /* LTR */
+-  margin: 0.1em;
+-  /**
+-   * In Opera 9, DOM elements with the property of "overflow: auto"
+-   * will partially hide its contents with unnecessary scrollbars when
+-   * its immediate child is floated without an explicit width set.
+-   */
+-  width: 15em;
+-}
+-#locale-translation-filter-form .form-type-select select {
+-  width: 100%;
+-}
+-#locale-translation-filter-form .form-actions {
+-  float: left; /* LTR */
+-  padding: 3ex 0 0 1em; /* LTR */
+-}
+-.language-switcher-locale-session a.active {
+-  color: #0062A0;
+-}
+-.language-switcher-locale-session a.session-active {
+-  color: #000000;
+-}
+diff --git a/themes/bartik/css/style-rtl.css b/themes/bartik/css/style-rtl.css
+index 3bb02ca..7e4f2b6 100644
+--- a/themes/bartik/css/style-rtl.css
++++ b/themes/bartik/css/style-rtl.css
+@@ -274,3 +274,16 @@ html.js input.throbbing {
+   right: -20px;
+   left: 0;
+ }
++
++/* ------- Admin language translation form ------- */
++#locale-translation-filter-form .form-item-language,
++#locale-translation-filter-form .form-item-translation,
++#locale-translation-filter-form .form-item-group {
++  float: right;
++  padding-left: .8em;
++  padding-right: 0;
++}
++#locale-translation-filter-form .form-actions {
++  float: right;
++  padding: 3ex 1em 0 0;
++}
+diff --git a/themes/bartik/css/style.css b/themes/bartik/css/style.css
+index 8e95202..9b49da9 100644
+--- a/themes/bartik/css/style.css
++++ b/themes/bartik/css/style.css
+@@ -1570,6 +1570,35 @@ div.admin-panel dd {
+ div.admin-panel .description {
+   margin: 0 0 14px 7px;
+ }
++#locale-translation-filter-form .form-item-language,
++#locale-translation-filter-form .form-item-translation,
++#locale-translation-filter-form .form-item-group {
++  float: left; /* LTR */
++  padding-right: .8em; /* LTR */
++  margin: 0.1em;
++  /**
++   * In Opera 9, DOM elements with the property of "overflow: auto"
++   * will partially hide its contents with unnecessary scrollbars when
++   * its immediate child is floated without an explicit width set.
++   */
++  width: 15em;
++}
++#locale-translation-filter-form .form-type-select select {
++  width: 100%;
++}
++#locale-translation-filter-form .form-actions {
++  float: left; /* LTR */
++  padding: 3ex 0 0 1em; /* LTR */
++}
++.locale-untranslated {
++  font-style: normal;
++}
++.language-switcher-locale-session a.active {
++  color: #0062A0;
++}
++.language-switcher-locale-session a.session-active {
++  color: #000000;
++}
+ 
+ /* ---------- Overlay layout styles ----------- */
+ 
+diff --git a/themes/garland/style-rtl.css b/themes/garland/style-rtl.css
+index 58aed57..5b3e42a 100644
+--- a/themes/garland/style-rtl.css
++++ b/themes/garland/style-rtl.css
+@@ -342,3 +342,18 @@ ul.secondary li a:visited {
+ #squeeze .right-corner {
+   min-height: 1%;
+ }
++
++/**
++ * Admin language translation form
++ */
++#locale-translation-filter-form .form-item-language,
++#locale-translation-filter-form .form-item-translation,
++#locale-translation-filter-form .form-item-group {
++  float: right;
++  padding-left: .8em;
++  padding-right: 0;
++}
++#locale-translation-filter-form .form-actions {
++  float: right;
++  padding: 3ex 1em 0 0;
++}
+diff --git a/themes/garland/style.css b/themes/garland/style.css
+index f36fa96..de68a8b 100644
+--- a/themes/garland/style.css
++++ b/themes/garland/style.css
+@@ -1168,6 +1168,35 @@ tr.taxonomy-term-divider-bottom {
+ .theme-selector .operations li {
+   list-style-image: none;
+ }
++#locale-translation-filter-form .form-item-language,
++#locale-translation-filter-form .form-item-translation,
++#locale-translation-filter-form .form-item-group {
++  float: left; /* LTR */
++  padding-right: .8em; /* LTR */
++  margin: 0.1em;
++  /**
++   * In Opera 9, DOM elements with the property of "overflow: auto"
++   * will partially hide its contents with unnecessary scrollbars when
++   * its immediate child is floated without an explicit width set.
++   */
++  width: 15em;
++}
++#locale-translation-filter-form .form-type-select select {
++  width: 100%;
++}
++#locale-translation-filter-form .form-actions {
++  float: left; /* LTR */
++  padding: 3ex 0 0 1em; /* LTR */
++}
++.locale-untranslated {
++  font-style: normal;
++}
++.language-switcher-locale-session a.active {
++  color: #0062A0;
++}
++.language-switcher-locale-session a.session-active {
++  color: #000000;
++}
+ 
+ /**
+  * CSS support
+diff --git a/themes/seven/style.css b/themes/seven/style.css
+index 8bb8026..1dc3d55 100644
+--- a/themes/seven/style.css
++++ b/themes/seven/style.css
+@@ -987,3 +987,34 @@ div.add-or-remove-shortcuts {
+   -webkit-border-radius: 8px;
+   border-radius: 8px;
+ }
++
++/* Local module */
++#locale-translation-filter-form .form-item-language,
++#locale-translation-filter-form .form-item-translation,
++#locale-translation-filter-form .form-item-group {
++  float: left; /* LTR */
++  padding-right: .8em; /* LTR */
++  margin: 0.1em;
++  /**
++   * In Opera 9, DOM elements with the property of "overflow: auto"
++   * will partially hide its contents with unnecessary scrollbars when
++   * its immediate child is floated without an explicit width set.
++   */
++  width: 15em;
++}
++#locale-translation-filter-form .form-type-select select {
++  width: 100%;
++}
++#locale-translation-filter-form .form-actions {
++  float: left; /* LTR */
++  padding: 3ex 0 0 1em; /* LTR */
++}
++.locale-untranslated {
++  font-style: normal;
++}
++.language-switcher-locale-session a.active {
++  color: #0062A0;
++}
++.language-switcher-locale-session a.session-active {
++  color: #000000;
++}
+\ No newline at end of file
