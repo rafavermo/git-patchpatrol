@@ -1,7 +1,7 @@
 import os
 import shlex
 import shutil
-from git.errors import GitCommandError
+from git import GitCommandError
 
 from ..bom import BOMEntry, BOMAssembler
 from ..segment import SegmentAssembler
@@ -14,8 +14,8 @@ class GitController(object):
         self._repo = repo
 
     def prepare(self):
-        headref = os.path.join(self._repo.path, 'HEAD')
-        savedref = os.path.join(self._repo.path, 'ORIG_HEAD')
+        headref = os.path.join(self._repo.git_dir, 'HEAD')
+        savedref = os.path.join(self._repo.git_dir, 'ORIG_HEAD')
 
         if os.path.exists(savedref):
             raise Exception("ORIG_HEAD exists. Please cleanup your repository and try again")
@@ -24,8 +24,8 @@ class GitController(object):
         shutil.copy(headref, savedref)
     
     def cleanup(self):
-        headref = os.path.join(self._repo.path, 'HEAD')
-        savedref = os.path.join(self._repo.path, 'ORIG_HEAD')
+        headref = os.path.join(self._repo.git_dir, 'HEAD')
+        savedref = os.path.join(self._repo.git_dir, 'ORIG_HEAD')
 
         if not os.path.exists(savedref):
             raise Exception("ORIG_HEAD does not exist. Unable to restore")
@@ -123,7 +123,7 @@ class GitController(object):
 
 
     def _sethead(self, ref):
-        headref = os.path.join(self._repo.path, 'HEAD')
+        headref = os.path.join(self._repo.git_dir, 'HEAD')
 
         f = open(headref, 'w')
         f.write("%s\n" % ref)
@@ -145,7 +145,7 @@ class GitController(object):
         # Reread and return the applied patch
         hunks_by_blob = {}
         currentblob = None
-        return self._repo.git.diff(cached=True, full_index=True)
+        return self._repo.git.diff(cached=True, full_index=True, output_nostrip=True)
 
 
 if __name__ == '__main__':
