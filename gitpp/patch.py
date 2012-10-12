@@ -3,7 +3,7 @@ import re
 # Regex for matching a hunk
 HUNK_PATTERN = re.compile(r'^@@ -(\d+)(,(\d+))? \+(\d+)(,(\d+)) @@?')
 
-def ParseError(Exception):
+class ParseError(Exception):
     pass
 
 
