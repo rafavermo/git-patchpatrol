@@ -57,9 +57,13 @@ if __name__ == '__main__':
             'affected': set()
         }
 
-        for (sym, data) in patch.parse(open(patchpath, 'r')):
-            if (sym == 'a'):
-                p['affected'].add(patch.pathstrip(data))
+        try:
+            for (sym, data) in patch.parse(open(patchpath, 'r')):
+                if (sym == 'a'):
+                    p['affected'].add(patch.pathstrip(data))
+        except patch.ParseError as e:
+            logging.warn('Unable to parse patch, skipping %s' % patchpath)
+            continue
 
         patches[pid] = p
 
