@@ -47,3 +47,26 @@ class SegmentAssembler(object):
 
     def getSegments(self):
         return self._segments
+
+
+def filter_segments(segments, filters):
+    result = []
+    for segment in segments:
+        if (filter_segment(segment, filters)):
+            result.append(segment)
+            continue
+
+    return result
+
+
+def filter_segment(segment, filters):
+    """
+    Return True if any of the commits in segments is accepted by any of the
+    given filters. Otherwise return False.
+    """
+    for commit in segment:
+        for f in filters:
+            if (f.filter(commit)):
+                return True
+
+    return False
