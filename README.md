@@ -24,6 +24,11 @@ A:  Givan a repo, a set of patches and a single commit:
 B:  Given a repo, a single patch and a range of commits:
     1.  Subranges of commits where the patch applies successfully / fails.
 
+Requirements:
+------------
+
+Needs git python with patch applied:
+https://github.com/gitpython-developers/GitPython/pull/77
 
 Usage:
 ------

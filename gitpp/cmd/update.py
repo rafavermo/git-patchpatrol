@@ -10,10 +10,15 @@ from git import Repo
 base = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), '..', '..'))
 sys.path.append(base)
 
+from gitpp import logger
 from gitpp import patch
 from gitpp.bomwalk import BOMWalk
-from gitpp.cache import FilesystemResultCache
+from gitpp.cache import SimpleFSStore
+from gitpp.filter.gitfilter import GitRevListFilter
+from gitpp.cache import CompositeKVStore
 from gitpp.scm.gitcontroller import GitController
+from gitpp.segment import filter_segments
+from gitpp.segmentwalk import SegmentWalk
 
 
 def patchid(repo, path):
@@ -26,12 +31,14 @@ def patchid(repo, path):
 
 if __name__ == '__main__':
 
-    #logging.getLogger().setLevel(logging.DEBUG)
+    logging.basicConfig()
+    logger.setLevel(logging.DEBUG)
 
-    bomcache = FilesystemResultCache()
+    bomcache = SimpleFSStore()
     bomcache.directory = '/tmp/bomcache'
-    patchcache = FilesystemResultCache()
-    patchcache.directory = '/tmp/patchcache'
+    patchstore = SimpleFSStore()
+    patchstore.directory = '/tmp/patchcache'
+    patchcache = CompositeKVStore(patchstore)
 
     repo = Repo('.')
     ctl = GitController(repo)
@@ -41,13 +48,13 @@ if __name__ == '__main__':
         try:
             pid = patchid(repo, patchpath)
         except Exception as e:
-            logging.warn('Unable to generate patchid, skipping %s' % patchpath)
+            logger.warn('Unable to generate patchid, skipping %s' % patchpath)
             continue
 
         try:
             mtime = datetime.fromtimestamp(os.stat(patchpath).st_mtime)
         except Exception as e:
-            logging.warn('Unable to determine mtime, skipping %s' % patchpath)
+            logger.warn('Unable to determine mtime, skipping %s' % patchpath)
             continue
 
         p = {
@@ -62,7 +69,7 @@ if __name__ == '__main__':
                 if (sym == 'a'):
                     p['affected'].add(patch.pathstrip(data))
         except patch.ParseError as e:
-            logging.warn('Unable to parse patch, skipping %s' % patchpath)
+            logger.warn('Unable to parse patch, skipping %s' % patchpath)
             continue
 
         patches[pid] = p
@@ -71,17 +78,26 @@ if __name__ == '__main__':
 
     # FIXME: Setup alternative index and point GIT_INDEX_FILE to it
 
-    segments = ctl.segmentize()
+    f = GitRevListFilter(repo, all=True, after='6 months')
+    f.prepare()
+
+    segments = filter_segments(ctl.segmentize(), [f])
+    boms = []
     for segment in segments:
         print "Examining segment %s..%s" % (segment[-1], segment[0])
         blobs_by_patch = {}
 
-        if bomcache.exists(segment[0], segment[-1]):
-            bom = bomcache.get(segment[0], segment[-1])
+        bomkey = (segment[0], segment[-1])
+        if bomkey in bomcache:
+            bom = bomcache[bomkey]
         else:
             bom = ctl.bom_from_segment(segment)
-            bomcache.put(segment[0], segment[-1], bom)
+            bomcache[bomkey] = bom
 
+        boms.append(bom)
+
+    commit_patch_results = []
+    for bom in boms:
         walk = BOMWalk(bom)
 
         for (pid, p) in patches.iteritems():
@@ -92,24 +108,19 @@ if __name__ == '__main__':
             blobs_by_patch[pid].update(paths)
 
             result = {}
-            result_complete = True
 
             # Try to load result from cache
-            for blobid in blobs_by_patch[pid].itervalues():
-                if patchcache.exists(pid, blobid):
-                    result[blobid] = patchcache.get(pid, blobid)
-                else:
-                    result_complete = False
-                    break
-
-            if not result_complete:
-                logging.info('Testing patch on %s: %s' % (commit, patches[pid]['path']))
+            patchkey = [(pid, blobid) for blobid in blobs_by_patch[pid].itervalues()]
+            if patchkey in patchcache:
+                logger.info('Read result from cache for patch on %s: %s' % (commit, patches[pid]['path']))
+                result = patchcache[patchkey]
+            else:
+                logger.info('Testing patch on %s: %s' % (commit, patches[pid]['path']))
                 newp = ctl.testpatch(commit, patches[pid]['path'])
 
                 # Put result into cache for the examined blobids
                 if newp == None:
-                    for blobid in blobs_by_patch[pid].itervalues():
-                        patchcache.put(pid, blobid, None)
+                    result = dict((key, None) for key in patchkey)
                 else:
                     hunks_by_blob = {}
                     currentblob = None
@@ -118,11 +129,12 @@ if __name__ == '__main__':
                             currentblob = hunks_by_blob.setdefault(data[0], list())
                         elif sym == '@':
                             currentblob.append(data)
+                    result = dict(((pid, blobid), hunks_by_blob[blobid]) for blobid in blobs_by_patch[pid].itervalues())
 
-                    for blobid in blobs_by_patch[pid].itervalues():
-                        patchcache.put(pid, blobid, hunks_by_blob[blobid])
+                patchcache[patchkey] = result
 
-            else:
-                logging.info('Read result from cache for patch on %s: %s' % (commit, patches[pid]['path']))
 
+            commit_patch_results.append((commit, p, result))
+
+    print len(commit_patch_results)
     ctl.cleanup()
