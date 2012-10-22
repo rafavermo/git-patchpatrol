@@ -13,9 +13,11 @@ sys.path.append(base)
 from gitpp import logger
 from gitpp import patch
 from gitpp.bomwalk import BOMWalk
+from gitpp.cache import CompositeKVStore
 from gitpp.cache import SimpleFSStore
 from gitpp.filter.gitfilter import GitRevListFilter
-from gitpp.cache import CompositeKVStore
+from gitpp.kvbulk import KVBulkNaive
+from gitpp.objectstore import ObjectStore
 from gitpp.scm.gitcontroller import GitController
 from gitpp.segment import filter_segments
 from gitpp.segmentwalk import SegmentWalk
@@ -32,6 +34,38 @@ def patchid(repo, path):
 def segmentid(segment):
     return "%s-%s" % (segment[-1], segment[0])
 
+class BOMFactory(object):
+    def __init__(self, ctl, segmentmap):
+        self._ctl = ctl
+        self._segmentmap = segmentmap
+
+    def create(self, sids):
+        result = {}
+
+        for sid in sids:
+            logger.debug('Constructing bom from segment: %s', sid)
+            result[sid] = self._ctl.bom_from_segment(self._segmentmap[sid])
+
+        return result
+
+def hunksconstruct(commit, patchkey, patch_path, ctl):
+    newp = ctl.testpatch(commit, patch_path)
+
+    # Put result into cache for the examined blobids
+    if newp == None:
+        result = dict((key, None) for key in patchkey)
+    else:
+        hunks_by_blob = {}
+        currentblob = None
+        for (sym, data) in patch.parse(newp.splitlines()):
+            if sym == 'i':
+                currentblob = hunks_by_blob.setdefault(data[0], [])
+            elif sym == '@':
+                currentblob.append(data)
+        result = dict(((pid, blobid), hunks) for (blobid, hunks) in hunks_by_blob.iteritems())
+
+    return result
+
 if __name__ == '__main__':
 
     logging.basicConfig()
@@ -41,6 +75,7 @@ if __name__ == '__main__':
     bomcache.directory = '/tmp/bomcache'
     bomcache.multilevel = False
     bomcache.pfxlen = 0
+    bombulk = KVBulkNaive(bomcache)
 
     patchstore = SimpleFSStore()
     patchstore.directory = '/tmp/patchcache'
@@ -90,31 +125,15 @@ if __name__ == '__main__':
     f.prepare()
 
     segments = filter_segments(ctl.segmentize(), [f])
-    segmentids = [segmentid(segment) for segment in segments]
+    segmentmap = dict((segmentid(segment), segment) for segment in segments)
+    bomfactory = BOMFactory(ctl, segmentmap)
 
-    boms = {}
-    bomcached = set(sid for sid in segmentids if sid in bomcache)
-
-    # Try to load bom for each segment from bom-cache
-    for sid in bomcached:
-        logger.debug('Loading bom from cache: %s', sid)
-        bom = bomcache[sid]
-        boms[sid] = bom
-
-    # Construct bom for each segment not in bom-cache
-    bomneedsupdate = dict((sid, segment) for (sid, segment) in zip(segmentids, segments) if sid not in bomcached)
-
-    for sid, segment in bomneedsupdate.iteritems():
-        logger.debug('Constructing bom from segment: %s', sid)
-        bom = ctl.bom_from_segment(segment)
-        boms[sid] = bom
-
-    # Store results in bom-cache
-    for sid, segment in bomneedsupdate.iteritems():
-        bomcache[sid] = boms[sid]
+    bomstore = ObjectStore(segmentmap.keys(), bombulk, bomfactory)
+    bomstore.load()
+    bomstore.dump()
 
     commit_patch_results = []
-    for (sid, bom) in [(sid, boms[sid]) for sid in segmentids]:
+    for (sid, bom) in bomstore.get_all().iteritems():
         blobs_by_patch = {}
         walk = BOMWalk(bom)
 
@@ -137,23 +156,7 @@ if __name__ == '__main__':
                 result = patchcache[patchkey]
             else:
                 logger.info('Testing patch on %s: %s' % (commit, patches[pid]['path']))
-                newp = ctl.testpatch(commit, patches[pid]['path'])
-
-                # Put result into cache for the examined blobids
-                if newp == None:
-                    result = dict((key, None) for key in patchkey)
-                else:
-                    hunks_by_blob = {}
-                    currentblob = None
-                    for (sym, data) in patch.parse(newp.splitlines()):
-                        if sym == 'i':
-                            currentblob = hunks_by_blob.setdefault(data[0], list())
-                        elif sym == '@':
-                            currentblob.append(data)
-                    result = dict(((pid, blobid), hunks_by_blob[blobid]) for blobid in blobs_by_patch[pid].itervalues())
-
-                patchcache[patchkey] = result
-
+                patchcache[patchkey] = hunksconstruct(commit, patchkey, patches[pid]['path'], ctl)
 
             commit_patch_results.append((commit, p, result))
 
