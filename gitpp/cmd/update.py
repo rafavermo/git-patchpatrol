@@ -29,6 +29,9 @@ def patchid(repo, path):
     return out.split()[0]
 
 
+def segmentid(segment):
+    return "%s-%s" % (segment[-1], segment[0])
+
 if __name__ == '__main__':
 
     logging.basicConfig()
@@ -36,8 +39,13 @@ if __name__ == '__main__':
 
     bomcache = SimpleFSStore()
     bomcache.directory = '/tmp/bomcache'
+    bomcache.multilevel = False
+    bomcache.pfxlen = 0
+
     patchstore = SimpleFSStore()
     patchstore.directory = '/tmp/patchcache'
+    patchstore.multilevel = True
+
     patchcache = CompositeKVStore(patchstore)
 
     repo = Repo('.')
@@ -82,22 +90,32 @@ if __name__ == '__main__':
     f.prepare()
 
     segments = filter_segments(ctl.segmentize(), [f])
-    boms = []
-    for segment in segments:
-        print "Examining segment %s..%s" % (segment[-1], segment[0])
-        blobs_by_patch = {}
+    segmentids = [segmentid(segment) for segment in segments]
 
-        bomkey = (segment[0], segment[-1])
-        if bomkey in bomcache:
-            bom = bomcache[bomkey]
-        else:
-            bom = ctl.bom_from_segment(segment)
-            bomcache[bomkey] = bom
+    boms = {}
+    bomcached = set(sid for sid in segmentids if sid in bomcache)
 
-        boms.append(bom)
+    # Try to load bom for each segment from bom-cache
+    for sid in bomcached:
+        logger.debug('Loading bom from cache: %s', sid)
+        bom = bomcache[sid]
+        boms[sid] = bom
+
+    # Construct bom for each segment not in bom-cache
+    bomneedsupdate = dict((sid, segment) for (sid, segment) in zip(segmentids, segments) if sid not in bomcached)
+
+    for sid, segment in bomneedsupdate.iteritems():
+        logger.debug('Constructing bom from segment: %s', sid)
+        bom = ctl.bom_from_segment(segment)
+        boms[sid] = bom
+
+    # Store results in bom-cache
+    for sid, segment in bomneedsupdate.iteritems():
+        bomcache[sid] = boms[sid]
 
     commit_patch_results = []
-    for bom in boms:
+    for (sid, bom) in [(sid, boms[sid]) for sid in segmentids]:
+        blobs_by_patch = {}
         walk = BOMWalk(bom)
 
         for (pid, p) in patches.iteritems():
@@ -105,6 +123,9 @@ if __name__ == '__main__':
             walk.watch(pid, p['affected'])
 
         for (commit, pid, paths) in walk.walk():
+            if not f.filter(commit):
+                continue
+
             blobs_by_patch[pid].update(paths)
 
             result = {}

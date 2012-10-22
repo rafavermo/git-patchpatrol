@@ -7,6 +7,7 @@ class SimpleFSStore(KVStore):
     def __init__(self):
         self.directory = None
         self.pfxlen = 2
+        self.multilevel = False
 
     def __getitem__(self, key):
         try:
@@ -42,12 +43,15 @@ class SimpleFSStore(KVStore):
         return os.path.isfile(self._construct_path(key))
 
     def _construct_path(self, key):
-        if not isinstance(key, collections.Iterable):
+        if not self.multilevel:
             key = (key,)
 
-        path = os.path.join(self.directory,
-            key[0][0:self.pfxlen],
-            key[0][self.pfxlen:])
+        if self.pfxlen > 0:
+            path = os.path.join(self.directory,
+                key[0][0:self.pfxlen],
+                key[0][self.pfxlen:])
+        else:
+            path = os.path.join(self.directory, key[0])
 
         for part in key[1:]:
             path = os.path.join(path, part)
