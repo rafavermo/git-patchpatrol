@@ -1,7 +1,6 @@
 import hashlib
 import logging
 import os
-import pprint
 import shutil
 import sys
 from datetime import datetime
@@ -34,7 +33,8 @@ def patchid(repo, path):
 def segmentid(segment):
     return "%s-%s" % (segment[-1], segment[0])
 
-class BOMFactory(object):
+
+class BOMConstructionFactory(object):
     def __init__(self, ctl, segmentmap):
         self._ctl = ctl
         self._segmentmap = segmentmap
@@ -48,23 +48,63 @@ class BOMFactory(object):
 
         return result
 
-def hunksconstruct(commit, patchkey, patch_path, ctl):
-    newp = ctl.testpatch(commit, patch_path)
 
-    # Put result into cache for the examined blobids
-    if newp == None:
-        result = dict((key, None) for key in patchkey)
-    else:
-        hunks_by_blob = {}
-        currentblob = None
-        for (sym, data) in patch.parse(newp.splitlines()):
-            if sym == 'i':
-                currentblob = hunks_by_blob.setdefault(data[0], [])
-            elif sym == '@':
-                currentblob.append(data)
-        result = dict(((pid, blobid), hunks) for (blobid, hunks) in hunks_by_blob.iteritems())
+class PatchTestingFactory(object):
+    def __init__(self, ctl, patchplan, patches):
+        self._ctl = ctl
+        self._patchplan = patchplan
+        self._patches = patches
+
+    def create(self, patchkeys):
+        result = {}
+
+        for patchkey in patchkeys:
+            pid = patchkey[0][0]
+            p = self._patches[pid]
+            commit = self._patchplan[patchkey]
+
+            logger.debug('Testing patch on %s: %s' % (commit, p['path']))
+
+            newp = ctl.testpatch(commit, p['path'])
+
+            # Put result into cache for the examined blobids
+            if newp == None:
+                result[patchkey] = dict((key, None) for key in patchkey)
+            else:
+                hunks_by_blob = {}
+                currentblob = None
+                for (sym, data) in patch.parse(newp.splitlines()):
+                    if sym == 'i':
+                        currentblob = hunks_by_blob.setdefault(data[0], [])
+                    elif sym == '@':
+                        currentblob.append(data)
+                result[patchkey] = dict(((pid, blobid), hunks) for (blobid, hunks) in hunks_by_blob.iteritems())
+
+        return result
+
+
+def construct_patchplan(boms):
+    result = {}
+
+    for (sid, bom) in boms.iteritems():
+        blobs_by_patch = {}
+        walk = BOMWalk(bom)
+
+        for (pid, p) in patches.iteritems():
+            blobs_by_patch[pid] = {}
+            walk.watch(pid, p['affected'])
+
+        for (commit, pid, paths) in walk.walk():
+            if not f.filter(commit):
+                continue
+
+            blobs_by_patch[pid].update(paths)
+
+            patchkey = tuple((pid, blobid) for blobid in blobs_by_patch[pid].itervalues())
+            result[patchkey] = commit
 
     return result
+
 
 if __name__ == '__main__':
 
@@ -77,11 +117,10 @@ if __name__ == '__main__':
     bomcache.pfxlen = 0
     bombulk = KVBulkNaive(bomcache)
 
-    patchstore = SimpleFSStore()
-    patchstore.directory = '/tmp/patchcache'
-    patchstore.multilevel = True
-
-    patchcache = CompositeKVStore(patchstore)
+    patchcache = SimpleFSStore()
+    patchcache.directory = '/tmp/patchcache'
+    patchcache.multilevel = True
+    patchbulk = KVBulkNaive(CompositeKVStore(patchcache))
 
     repo = Repo('.')
     ctl = GitController(repo)
@@ -126,39 +165,16 @@ if __name__ == '__main__':
 
     segments = filter_segments(ctl.segmentize(), [f])
     segmentmap = dict((segmentid(segment), segment) for segment in segments)
-    bomfactory = BOMFactory(ctl, segmentmap)
+    bomfactory = BOMConstructionFactory(ctl, segmentmap)
 
     bomstore = ObjectStore(segmentmap.keys(), bombulk, bomfactory)
     bomstore.load()
     bomstore.dump()
 
-    commit_patch_results = []
-    for (sid, bom) in bomstore.get_all().iteritems():
-        blobs_by_patch = {}
-        walk = BOMWalk(bom)
+    patchplan = construct_patchplan(bomstore.get_all())
+    patchfactory = PatchTestingFactory(ctl, patchplan, patches)
+    patchstore = ObjectStore(patchplan.keys(), patchbulk, patchfactory)
+    patchstore.load()
+    patchstore.dump()
 
-        for (pid, p) in patches.iteritems():
-            blobs_by_patch[pid] = {}
-            walk.watch(pid, p['affected'])
-
-        for (commit, pid, paths) in walk.walk():
-            if not f.filter(commit):
-                continue
-
-            blobs_by_patch[pid].update(paths)
-
-            result = {}
-
-            # Try to load result from cache
-            patchkey = [(pid, blobid) for blobid in blobs_by_patch[pid].itervalues()]
-            if patchkey in patchcache:
-                logger.info('Read result from cache for patch on %s: %s' % (commit, patches[pid]['path']))
-                result = patchcache[patchkey]
-            else:
-                logger.info('Testing patch on %s: %s' % (commit, patches[pid]['path']))
-                patchcache[patchkey] = hunksconstruct(commit, patchkey, patches[pid]['path'], ctl)
-
-            commit_patch_results.append((commit, p, result))
-
-    print len(commit_patch_results)
     ctl.cleanup()
