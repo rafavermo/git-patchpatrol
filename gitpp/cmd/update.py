@@ -11,7 +11,6 @@ sys.path.append(base)
 
 from gitpp import logger
 from gitpp import patch
-from gitpp.bomwalk import BOMWalk
 from gitpp.cache import CompositeKVStore
 from gitpp.cache import SimpleFSStore
 from gitpp.filter.gitfilter import GitRevListFilter
@@ -20,6 +19,7 @@ from gitpp.objectstore import ObjectStore
 from gitpp.scm.gitcontroller import GitController
 from gitpp.segment import filter_segments
 from gitpp.segmentwalk import SegmentWalk
+from gitpp.testingplan import TestingPlan
 
 
 def patchid(repo, path):
@@ -50,9 +50,9 @@ class BOMConstructionFactory(object):
 
 
 class PatchTestingFactory(object):
-    def __init__(self, ctl, patchplan, patches):
+    def __init__(self, ctl, plan, patches):
         self._ctl = ctl
-        self._patchplan = patchplan
+        self._plan = plan
         self._patches = patches
 
     def create(self, patchkeys):
@@ -61,7 +61,7 @@ class PatchTestingFactory(object):
         for patchkey in patchkeys:
             pid = patchkey[0][0]
             p = self._patches[pid]
-            commit = self._patchplan[patchkey]
+            commit = self._plan[patchkey]
 
             logger.debug('Testing patch on %s: %s' % (commit, p['path']))
 
@@ -81,29 +81,6 @@ class PatchTestingFactory(object):
                 result[patchkey] = dict(((pid, blobid), hunks) for (blobid, hunks) in hunks_by_blob.iteritems())
 
         return result
-
-
-def construct_patchplan(boms):
-    result = {}
-
-    for (sid, bom) in boms.iteritems():
-        blobs_by_patch = {}
-        walk = BOMWalk(bom)
-
-        for (pid, p) in patches.iteritems():
-            blobs_by_patch[pid] = {}
-            walk.watch(pid, p['affected'])
-
-        for (commit, pid, paths) in walk.walk():
-            if not f.filter(commit):
-                continue
-
-            blobs_by_patch[pid].update(paths)
-
-            patchkey = tuple((pid, blobid) for blobid in blobs_by_patch[pid].itervalues())
-            result[patchkey] = commit
-
-    return result
 
 
 if __name__ == '__main__':
@@ -171,9 +148,10 @@ if __name__ == '__main__':
     bomstore.load()
     bomstore.dump()
 
-    patchplan = construct_patchplan(bomstore.get_all())
-    patchfactory = PatchTestingFactory(ctl, patchplan, patches)
-    patchstore = ObjectStore(patchplan.keys(), patchbulk, patchfactory)
+    planner = TestingPlan(ctl, patches, [f])
+    plan = planner.construct(bomstore.get_all())
+    patchfactory = PatchTestingFactory(ctl, plan, patches)
+    patchstore = ObjectStore(plan.keys(), patchbulk, patchfactory)
     patchstore.load()
     patchstore.dump()
 
