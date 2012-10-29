@@ -1,6 +1,7 @@
 import os.path
 import pickle
 import collections
+import glob
 from .kvstore import KVStore
 
 class SimpleFSStore(KVStore):
@@ -57,6 +58,64 @@ class SimpleFSStore(KVStore):
             path = os.path.join(path, part)
 
         return path
+
+class SimpleFSSearch(object):
+    def __init__(self):
+        self.directory = None
+        self.pfxlen = 2
+        self.multilevel = False
+
+
+    def _pfxpattern(self, key):
+        if self.pfxlen > 0 and key == '*':
+            return ('*', '*')
+        elif self.pfxlen > 0 and key != '*':
+            return (key[0:self.pfxlen], key[self.pfxlen:])
+        elif self.pfxlen == 0 and key == '*':
+            return ('*',)
+        elif self.pfxlen == 0 and key != '*':
+            return (key,)
+
+
+    def _pattern(self, keypat):
+        if not self.multilevel:
+            keypat = (keypat,)
+
+        path = os.path.join(self.directory, *self._pfxpattern(keypat[0]))
+
+        for part in keypat[1:]:
+            path = os.path.join(path, part)
+
+        return path
+
+    def _key(self, filename):
+        assert (os.path.commonprefix((self.directory, filename)) == self.directory)
+
+        filename = filename[len(self.directory)+1:]
+        parts = filename.split(os.path.sep)
+
+        if self.pfxlen > 0:
+            key = ("%s%s" % (parts[0], parts[1]),)
+
+            if len(parts) > 2:
+                key += tuple(parts[2:])
+        else:
+            key = tuple(parts)
+
+        if not self.multilevel:
+            assert(len(key) == 1)
+            key = key[0]
+
+        return key
+
+
+    def search(self, condition):
+        result = []
+
+        for f in glob.iglob(self._pattern(condition)):
+            result.append(self._key(f))
+
+        return result
 
 
 class CompositeKVStore(KVStore):
