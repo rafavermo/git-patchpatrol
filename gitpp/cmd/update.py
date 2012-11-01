@@ -16,6 +16,7 @@ from gitpp.cache import SimpleFSStore
 from gitpp.filter.gitfilter import GitRevListFilter
 from gitpp.kvbulk import KVBulkNaive
 from gitpp.objectstore import ObjectStore
+from gitpp.patchfile import GitPatchfileFactory, PatchfileError
 from gitpp.scm.gitcontroller import GitController
 from gitpp.segment import filter_segments
 from gitpp.segmentwalk import SegmentWalk
@@ -63,9 +64,9 @@ class PatchTestingFactory(object):
             p = self._patches[pid]
             commit = self._plan[patchkey]
 
-            logger.debug('Testing patch on %s: %s' % (commit, p['path']))
+            logger.debug('Testing patch on %s: %s' % (commit, p.path))
 
-            newp = ctl.testpatch(commit, p['path'])
+            newp = ctl.testpatch(commit, p.path)
 
             # Put result into cache for the examined blobids
             if newp == None:
@@ -102,37 +103,14 @@ if __name__ == '__main__':
     repo = Repo('.')
     ctl = GitController(repo)
 
+    patchfilefactory = GitPatchfileFactory(repo)
     patches = {}
     for patchpath in sys.argv[1:]:
         try:
-            pid = patchid(repo, patchpath)
-        except Exception as e:
-            logger.warn('Unable to generate patchid, skipping %s' % patchpath)
-            continue
-
-        try:
-            mtime = datetime.fromtimestamp(os.stat(patchpath).st_mtime)
-        except Exception as e:
-            logger.warn('Unable to determine mtime, skipping %s' % patchpath)
-            continue
-
-        p = {
-            'path': patchpath,
-            'patchid': pid,
-            'mtime': mtime,
-            'affected': set()
-        }
-
-        try:
-            for (sym, data) in patch.parse(open(patchpath, 'r')):
-                if (sym == 'a'):
-                    p['affected'].add(patch.pathstrip(data))
-        except patch.ParseError as e:
-            logger.warn('Unable to parse patch, skipping %s' % patchpath)
-            continue
-
-        patches[pid] = p
-
+            p = patchfilefactory.fromfile(patchpath)
+            patches[p.patchid] = p
+        except PatchfileError, why:
+            logger.warn('Skipping patch because: %s' % str(why))
     ctl.prepare()
 
     # FIXME: Setup alternative index and point GIT_INDEX_FILE to it

@@ -15,7 +15,7 @@ class TestingPlan(object):
 
             for (pid, p) in self._patches.iteritems():
                 blobs_by_patch[pid] = {}
-                walk.watch(pid, p['affected'])
+                walk.watch(pid, p.affected)
 
             for (commit, pid, paths) in walk.walk():
                 if self._reject_commit(commit):
