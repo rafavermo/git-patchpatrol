@@ -3,7 +3,6 @@ import logging
 import os
 import shutil
 import sys
-from datetime import datetime
 from git import Repo
 
 base = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), '..', '..'))
@@ -21,14 +20,6 @@ from gitpp.scm.gitcontroller import GitController
 from gitpp.segment import filter_segments
 from gitpp.segmentwalk import SegmentWalk
 from gitpp.testingplan import TestingPlan
-
-
-def patchid(repo, path):
-    istream = open(path, 'r')
-    out = repo.git.patch_id(istream=istream)
-    istream.close()
-
-    return out.split()[0]
 
 
 def segmentid(segment):
