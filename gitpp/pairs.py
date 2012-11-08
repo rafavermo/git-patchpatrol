@@ -1,3 +1,5 @@
+import itertools
+
 class PairError(Exception):
     def __init__(self, tail, *args, **kwargs):
         super(PairError, self).__init__(*args, **kwargs)
@@ -39,3 +41,21 @@ def overlapping_pairs(seq):
     for sub in lists_of_pairs(seq):
         if len(sub) != 2:
             yield sub
+
+
+def lists_of_combinations(mapseq, r):
+    """
+    For a list of key -> value mappings in mapseq [(k_x, v_y), ...] collect
+    all keys and build r-length combinations. For each combination yield a
+    sublist of key -> value mappings containing only those entries where key
+    is in the combination.
+
+    @see itertools.combinations
+    """
+
+    # Collect all keys
+    keys = set(key for (key, val) in mapseq)
+
+    # For each group configuration yield a filtered list of the input
+    for comb in itertools.combinations(keys, r):
+        yield [(key, val) for (key, val) in mapseq if key in comb]
